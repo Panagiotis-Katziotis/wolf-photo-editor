@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WOLF — Photo Editor</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181c;
+    --surface2: #222228;
+    --border: #2e2e38;
+    --accent: #493db7;
+    --accent2: #f04a8a;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --toolbar-w: 64px;
+    --panel-w: 260px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ─────────────────────────────────── */
+  #topbar {
+    height: 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 20px;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+  #topbar .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    margin-right: 8px;
+  }
+  .tb-sep { width: 1px; height: 24px; background: var(--border); }
+  .tb-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 14px;
+    border-radius: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all .15s;
+    letter-spacing: .04em;
+  }
+  .tb-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .tb-btn.accent { background: var(--accent); color: #0e0e10; border-color: var(--accent); font-weight: 500; }
+  .tb-btn.accent:hover { background: #5cd4f5; }
+  #zoom-display {
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: auto;
+    letter-spacing: .05em;
+  }
+  #active-tool-label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .05em;
+  }
+
+  /* ── MAIN LAYOUT ─────────────────────────────── */
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── LEFT TOOLBAR ────────────────────────────── */
+  #toolbar {
+    width: var(--toolbar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 0;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .tool-btn {
+    width: 40px;
+    height: 40px;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .15s;
+    color: var(--muted);
+    position: relative;
+  }
+  .tool-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--border); }
+  .tool-btn.active { background: var(--surface2); color: var(--accent); border-color: var(--accent); }
+  .tool-btn svg { pointer-events: none; }
+  .tool-tooltip {
+    position: absolute;
+    left: 48px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity .15s;
+    z-index: 200;
+  }
+  .tool-btn:hover .tool-tooltip { opacity: 1; }
+
+  /* ── CANVAS AREA ─────────────────────────────── */
+  #canvas-wrap {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(200,240,74,.04) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(240,74,138,.04) 0%, transparent 50%),
+      repeating-conic-gradient(#161618 0% 25%, #111113 0% 50%) 0 0 / 20px 20px;
+  }
+  #canvas {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    cursor: default;
+  }
+
+  /* ── RIGHT PANEL ─────────────────────────────── */
+  #panel {
+    width: var(--panel-w);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .panel-section {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+  }
+  .panel-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: .12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .prop-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 8px;
+  }
+  .prop-label {
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 40px;
+    letter-spacing: .04em;
+  }
+  .prop-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    width: 80px;
+    text-align: right;
+    transition: border-color .15s;
+  }
+  .prop-input:focus { outline: none; border-color: var(--accent); }
+  .prop-input::-webkit-inner-spin-button { opacity: 0; }
+
+  .layer-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background .15s;
+    margin-bottom: 4px;
+    border: 1px solid transparent;
+  }
+  .layer-item:hover { background: var(--surface2); }
+  .layer-item.selected { background: var(--surface2); border-color: var(--accent); }
+  .layer-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
+    background: var(--border);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .layer-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .layer-name {
+    font-size: 11px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .layer-del {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--muted);
+    padding: 2px;
+    border-radius: 3px;
+    line-height: 1;
+    display: flex;
+    transition: color .15s;
+  }
+  .layer-del:hover { color: var(--accent2); }
+
+  /* crop overlay */
+  #crop-overlay {
+    position: absolute;
+    border: 2px solid var(--accent);
+    display: none;
+    pointer-events: none;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,.55);
+  }
+  #crop-overlay .crop-handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: var(--accent);
+    border-radius: 2px;
+    pointer-events: all;
+    cursor: nwse-resize;
+  }
+  #crop-overlay .ch-nw { top:-5px; left:-5px; cursor: nwse-resize; }
+  #crop-overlay .ch-ne { top:-5px; right:-5px; cursor: nesw-resize; }
+  #crop-overlay .ch-sw { bottom:-5px; left:-5px; cursor: nesw-resize; }
+  #crop-overlay .ch-se { bottom:-5px; right:-5px; cursor: nwse-resize; }
+
+  /* bottom status */
+  #statusbar {
+    height: 26px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 24px;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: .05em;
+    flex-shrink: 0;
+  }
+  #statusbar span { display: flex; align-items: center; gap: 5px; }
+
+  input[type=file] { display: none; }
+
+  /* slider */
+  .prop-slider {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  .prop-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 13px;
+    height: 13px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .slider-row {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+  .slider-row-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .slider-row-header span:last-child { color: var(--text); }
+
+  #empty-state {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    pointer-events: none;
+  }
+  #empty-state .es-icon {
+    width: 64px;
+    height: 64px;
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+  }
+  #empty-state .es-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: .05em;
+  }
+  #empty-state .es-sub {
+    font-size: 11px;
+    color: var(--border);
+    letter-spacing: .08em;
+    text-align: center;
+  }
+
+  .tb-group-sep { width: 32px; height: 1px; background: var(--border); margin: 4px 0; }
+
+  /* pen panel color swatch + picker */
+  #pen-color-swatch {
+    width: 28px; height: 28px;
+    border-radius: 4px;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: border-color .15s;
+    position: relative;
+  }
+  #pen-color-swatch:hover { border-color: var(--accent); }
+  #pen-color-input { position: absolute; opacity: 0; width: 100%; height: 100%; top: 0; left: 0; cursor: pointer; }
+  .color-presets {
+    display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px;
+  }
+  .color-preset {
+    width: 20px; height: 20px; border-radius: 3px;
+    border: 1.5px solid rgba(255,255,255,.1);
+    cursor: pointer; transition: transform .1s, border-color .1s;
+  }
+  .color-preset:hover { transform: scale(1.2); border-color: var(--accent); }
+
+  /* eyedropper tooltip */
+  #eyedropper-preview {
+    position: fixed;
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    border: 3px solid #fff;
+    box-shadow: 0 2px 12px rgba(0,0,0,.6);
+    pointer-events: none;
+    display: none;
+    z-index: 9999;
+    transform: translate(-50%, -110%);
+  }
+
+  /* live pen cursor ring */
+  #pen-cursor {
+    position: fixed;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.8);
+    pointer-events: none;
+    display: none;
+    z-index: 9998;
+    transform: translate(-50%, -50%);
+    mix-blend-mode: difference;
+  }
+</style>
+</head>
+<body>
+
+<!-- HIDDEN FILE INPUTS -->
+<input type="file" id="file-open" accept="image/*">
+<input type="file" id="file-add" accept="image/*">
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <span class="logo">WOLF</span>
+  <div class="tb-sep"></div>
+  <button class="tb-btn accent" onclick="document.getElementById('file-open').click()">＋ Open Image</button>
+  <button class="tb-btn" onclick="document.getElementById('file-add').click()" id="btn-add-layer" style="display:none">＋ Add Layer</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" id="btn-undo" onclick="undo()" title="Undo (Ctrl+Z)" style="opacity:.4;cursor:not-allowed">↩ Undo</button>
+  <button class="tb-btn" id="btn-redo" onclick="redo()" title="Redo (Ctrl+Y)" style="opacity:.4;cursor:not-allowed">↪ Redo</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="exportCanvas()">↓ Export PNG</button>
+  <span id="active-tool-label">NO IMAGE</span>
+  <span id="zoom-display">100%</span>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- TOOLBAR -->
+  <div id="toolbar">
+    <button class="tool-btn" id="tool-move" onclick="setTool('move')" title="">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M12 12v.01"/><path d="M12 3v18M3 12h18"/></svg>
+      <span class="tool-tooltip">Move (V)</span>
+    </button>
+    <button class="tool-btn" id="tool-crop" onclick="setTool('crop')" title="">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2v14a2 2 0 002 2h14"/><path d="M18 22V8a2 2 0 00-2-2H2"/></svg>
+      <span class="tool-tooltip">Crop (C)</span>
+    </button>
+    <button class="tool-btn" id="tool-rotate" onclick="setTool('rotate')" title="">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg>
+      <span class="tool-tooltip">Rotate (R)</span>
+    </button>
+    <button class="tool-btn" id="tool-resize" onclick="setTool('resize')" title="">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      <span class="tool-tooltip">Resize (S)</span>
+    </button>
+    <div class="tb-group-sep"></div>
+    <button class="tool-btn" id="tool-pen" onclick="setTool('pen')" title="">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+      <span class="tool-tooltip">Pen (P)</span>
+    </button>
+    <button class="tool-btn" id="tool-eraser" onclick="setTool('eraser')" title="">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l10-10 7 7-2.5 2.5"/><path d="M6.0001 11L13 18"/></svg>
+      <span class="tool-tooltip">Eraser (E)</span>
+    </button>
+    <button class="tool-btn" id="tool-eyedropper" onclick="setTool('eyedropper')" title="">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 22l4-4"/><path d="M3.5 20.5L13 11"/><path d="M9.5 5.5l3-3 4 4-3 3"/><path d="M15 4l4.3 4.3a1 1 0 010 1.4l-1.6 1.6a1 1 0 01-1.4 0L12 7"/></svg>
+      <span class="tool-tooltip">Eyedropper (I)</span>
+    </button>
+    <div class="tb-group-sep"></div>
+    <button class="tool-btn" onclick="zoomIn()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      <span class="tool-tooltip">Zoom In (+)</span>
+    </button>
+    <button class="tool-btn" onclick="zoomOut()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      <span class="tool-tooltip">Zoom Out (-)</span>
+    </button>
+    <button class="tool-btn" onclick="zoomFit()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+      <span class="tool-tooltip">Fit to View (F)</span>
+    </button>
+  </div>
+
+  <!-- CANVAS WRAP -->
+  <div id="canvas-wrap">
+    <canvas id="canvas"></canvas>
+    <div id="crop-overlay">
+      <div class="crop-handle ch-nw" data-corner="nw"></div>
+      <div class="crop-handle ch-ne" data-corner="ne"></div>
+      <div class="crop-handle ch-sw" data-corner="sw"></div>
+      <div class="crop-handle ch-se" data-corner="se"></div>
+    </div>
+    <div id="empty-state">
+      <div class="es-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      </div>
+      <div class="es-title">WOLF</div>
+      <div class="es-sub">CLICK "＋ OPEN IMAGE" TO BEGIN<br>OR DROP AN IMAGE HERE</div>
+    </div>
+  </div>
+  <div id="eyedropper-preview"></div>
+  <div id="pen-cursor"></div>
+
+  <!-- RIGHT PANEL -->
+  <div id="panel">
+
+    <!-- TRANSFORM -->
+    <div class="panel-section" id="panel-transform" style="display:none">
+      <div class="panel-title">Transform</div>
+      <div class="prop-row">
+        <span class="prop-label">X</span>
+        <input class="prop-input" id="inp-x" type="number" value="0" oninput="applyPropInput()">
+        <span class="prop-label" style="text-align:right">Y</span>
+        <input class="prop-input" id="inp-y" type="number" value="0" oninput="applyPropInput()">
+      </div>
+      <div class="prop-row">
+        <span class="prop-label">W</span>
+        <input class="prop-input" id="inp-w" type="number" value="0" oninput="applyPropInput()">
+        <span class="prop-label" style="text-align:right">H</span>
+        <input class="prop-input" id="inp-h" type="number" value="0" oninput="applyPropInput()">
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-header"><span>Rotation</span><span id="rot-val">0°</span></div>
+        <input class="prop-slider" id="rot-slider" type="range" min="-180" max="180" value="0" oninput="applyRotSlider()">
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-header"><span>Opacity</span><span id="op-val">100%</span></div>
+        <input class="prop-slider" id="op-slider" type="range" min="0" max="100" value="100" oninput="applyOpSlider()">
+      </div>
+    </div>
+
+    <!-- CROP CONTROLS -->
+    <div class="panel-section" id="panel-crop" style="display:none">
+      <div class="panel-title">Crop</div>
+      <p style="font-size:11px; color:var(--muted); line-height:1.6; margin-bottom:12px;">Drag the handles on the canvas to set the crop region.</p>
+      <div style="display:flex; gap:8px;">
+        <button class="tb-btn accent" style="flex:1" onclick="applyCrop()">✓ Apply</button>
+        <button class="tb-btn" style="flex:1" onclick="cancelCrop()">✕ Cancel</button>
+      </div>
+    </div>
+
+    <!-- ADJUSTMENTS -->
+    <div class="panel-section" id="panel-adjustments" style="display:none">
+      <div class="panel-title">Adjustments</div>
+      <div class="slider-row">
+        <div class="slider-row-header"><span>Brightness</span><span id="br-val">0</span></div>
+        <input class="prop-slider" id="br-slider" type="range" min="-100" max="100" value="0" oninput="applyAdjustments()">
+      </div>
+      <div class="slider-row">
+        <div class="slider-row-header"><span>Contrast</span><span id="co-val">0</span></div>
+        <input class="prop-slider" id="co-slider" type="range" min="-100" max="100" value="0" oninput="applyAdjustments()">
+      </div>
+      <button class="tb-btn" style="width:100%; margin-top:2px;" onclick="resetAdjustments()">↺ Reset</button>
+    </div>
+
+    <!-- PEN / ERASER PANEL -->
+    <div class="panel-section" id="panel-pen" style="display:none">
+      <div class="panel-title">Draw</div>
+
+      <div class="prop-row" style="align-items:center; margin-bottom:12px;">
+        <span class="prop-label">Color</span>
+        <div id="pen-color-swatch" title="Click to pick color">
+          <input type="color" id="pen-color-input" value="#ff0000" oninput="setPenColor(this.value)">
+        </div>
+        <span style="font-size:10px; color:var(--muted); margin-left:4px;" id="pen-color-hex">#ff0000</span>
+        <button class="tb-btn" style="margin-left:auto; font-size:10px; padding:3px 8px;" onclick="setTool('eyedropper')" title="Pick from image (I)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M2 22l4-4M3.5 20.5L13 11M9.5 5.5l3-3 4 4-3 3M15 4l4.3 4.3a1 1 0 010 1.4l-1.6 1.6a1 1 0 01-1.4 0L12 7"/></svg>
+        </button>
+      </div>
+
+      <div class="color-presets">
+        <div class="color-preset" style="background:#ffffff" onclick="applyPresetColor('#ffffff')"></div>
+        <div class="color-preset" style="background:#000000; border-color:rgba(255,255,255,.25)" onclick="applyPresetColor('#000000')"></div>
+        <div class="color-preset" style="background:#ff3333" onclick="applyPresetColor('#ff3333')"></div>
+        <div class="color-preset" style="background:#ff9900" onclick="applyPresetColor('#ff9900')"></div>
+        <div class="color-preset" style="background:#ffee00" onclick="applyPresetColor('#ffee00')"></div>
+        <div class="color-preset" style="background:#44dd44" onclick="applyPresetColor('#44dd44')"></div>
+        <div class="color-preset" style="background:#44aaff" onclick="applyPresetColor('#44aaff')"></div>
+        <div class="color-preset" style="background:#cc44ff" onclick="applyPresetColor('#cc44ff')"></div>
+        <div class="color-preset" style="background:#ff44aa" onclick="applyPresetColor('#ff44aa')"></div>
+        <div class="color-preset" style="background:#c8f04a" onclick="applyPresetColor('#c8f04a')"></div>
+      </div>
+
+      <div style="margin-top:12px" class="slider-row">
+        <div class="slider-row-header"><span>Size</span><span id="pen-size-val">8px</span></div>
+        <input class="prop-slider" id="pen-size-slider" type="range" min="1" max="80" value="8" oninput="updatePenSize()">
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-row-header"><span>Opacity</span><span id="pen-opacity-val">100%</span></div>
+        <input class="prop-slider" id="pen-opacity-slider" type="range" min="1" max="100" value="100" oninput="updatePenOpacity()">
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-row-header"><span>Eraser Size</span><span id="eraser-size-val">20px</span></div>
+        <input class="prop-slider" id="eraser-size-slider" type="range" min="2" max="120" value="20" oninput="updateEraserSize()">
+      </div>
+
+      <button class="tb-btn" style="width:100%; margin-top:4px; color:var(--accent2); border-color:var(--accent2);" onclick="clearDrawLayer()">✕ Clear All Strokes</button>
+    </div>
+
+    <!-- LAYERS -->
+    <div class="panel-section" id="panel-layers" style="display:none">
+      <div class="panel-title">Layers</div>
+      <div id="layer-list"></div>
+    </div>
+
+    <!-- HINT -->
+    <div class="panel-section" id="panel-hint">
+      <div class="panel-title">Hints</div>
+      <p style="font-size:11px; color:var(--muted); line-height:1.8;">
+        V — Move<br>
+        C — Crop<br>
+        R — Rotate<br>
+        S — Resize<br>
+        P — Pen<br>
+        E — Eraser<br>
+        I — Eyedropper<br>
+        [ / ] — Pen size<br>
+        + / − — Zoom<br>
+        F — Fit view<br>
+        Del — Delete layer<br>
+        Ctrl+Z — Undo<br>
+        Ctrl+Y — Redo
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <span id="sb-layers">0 layers</span>
+  <span id="sb-cursor">—</span>
+  <span id="sb-size">—</span>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════════ */
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('canvas-wrap');
+
+let layers = [];          // { img, x, y, w, h, rot, opacity, name }
+let selectedIndex = -1;
+let currentTool = 'move';
+let zoom = 1;
+let canvasW = 800, canvasH = 600;
+
+// undo/redo history
+let history = [];   // array of snapshots
+let historyIndex = -1;
+const MAX_HISTORY = 50;
+
+// interaction state
+let dragging = false, resizing = false, rotating = false;
+let dragStart = {}, rotStart = {};
+
+// draw layer — persistent offscreen canvas holding all strokes
+let drawCanvas = document.createElement('canvas');
+let drawCtx = drawCanvas.getContext('2d');
+let penDrawing = false;
+let penLastPt = null;
+let penColor = '#ff0000';
+let penSize = 8;
+let penOpacity = 1.0;
+let eraserSize = 20;
+
+// eyedropper
+let eyedropperActive = false;
+let prevTool = 'move'; // tool to return to after eyedropper pick
+
+// crop state
+let cropping = false;
+let cropRect = { x: 0, y: 0, w: 0, h: 0 };
+let cropDragging = false, cropResizing = false;
+let cropStart = {}, cropHandleCorner = null;
+const cropOverlay = document.getElementById('crop-overlay');
+
+/* ═══════════════════════════════════════════════════════════════════
+   UNDO / REDO
+═══════════════════════════════════════════════════════════════════ */
+function snapshotLayers() {
+  return layers.map(l => ({
+    img: l.img, thumb: l.thumb, name: l.name,
+    x: l.x, y: l.y, w: l.w, h: l.h,
+    rot: l.rot, opacity: l.opacity,
+    brightness: l.brightness || 0, contrast: l.contrast || 0
+  }));
+}
+
+function snapshotDraw() {
+  // Save drawCanvas as dataURL (empty string if blank)
+  try { return drawCanvas.toDataURL(); } catch(e) { return ''; }
+}
+
+function saveHistory() {
+  // drop any future states if we branched
+  history = history.slice(0, historyIndex + 1);
+  history.push({ layers: snapshotLayers(), selectedIndex, canvasW, canvasH, drawData: snapshotDraw() });
+  if (history.length > MAX_HISTORY) history.shift();
+  historyIndex = history.length - 1;
+  updateUndoRedoBtns();
+}
+
+function restoreSnapshot(snap) {
+  canvasW = snap.canvasW; canvasH = snap.canvasH;
+  layers = snap.layers.map(l => ({ ...l }));
+  selectedIndex = snap.selectedIndex;
+  canvas.width = canvasW; canvas.height = canvasH;
+  canvas.style.width = (canvasW * zoom) + 'px';
+  canvas.style.height = (canvasH * zoom) + 'px';
+  // restore draw layer
+  drawCanvas.width = canvasW; drawCanvas.height = canvasH;
+  drawCtx.clearRect(0, 0, canvasW, canvasH);
+  if (snap.drawData && snap.drawData.length > 10) {
+    const img = new Image();
+    img.onload = () => { drawCtx.drawImage(img, 0, 0); render(); };
+    img.src = snap.drawData;
+  }
+}
+
+function undo() {
+  if (historyIndex <= 0) return;
+  historyIndex--;
+  restoreSnapshot(history[historyIndex]);
+  render(); renderLayers(); updateUndoRedoBtns();
+  if (layers.length > 0) { showPanels(); document.getElementById('empty-state').style.display = 'none'; document.getElementById('btn-add-layer').style.display = ''; }
+  else { document.getElementById('empty-state').style.display = ''; document.getElementById('btn-add-layer').style.display = 'none'; ['panel-transform','panel-adjustments','panel-layers','panel-crop'].forEach(id => document.getElementById(id).style.display='none'); }
+}
+
+function redo() {
+  if (historyIndex >= history.length - 1) return;
+  historyIndex++;
+  restoreSnapshot(history[historyIndex]);
+  render(); renderLayers(); updateUndoRedoBtns();
+  if (layers.length > 0) { showPanels(); document.getElementById('empty-state').style.display = 'none'; document.getElementById('btn-add-layer').style.display = ''; }
+}
+
+function updateUndoRedoBtns() {
+  const u = document.getElementById('btn-undo');
+  const r = document.getElementById('btn-redo');
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+  u.style.opacity = canUndo ? '1' : '.4';
+  u.style.cursor  = canUndo ? 'pointer' : 'not-allowed';
+  r.style.opacity = canRedo ? '1' : '.4';
+  r.style.cursor  = canRedo ? 'pointer' : 'not-allowed';
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CANVAS SETUP
+═══════════════════════════════════════════════════════════════════ */
+function initCanvas(w, h) {
+  canvasW = w; canvasH = h;
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = (w * zoom) + 'px';
+  canvas.style.height = (h * zoom) + 'px';
+  canvas.style.boxShadow = '0 8px 48px rgba(0,0,0,.6)';
+  // sync draw layer — preserve existing strokes if same size
+  if (drawCanvas.width !== w || drawCanvas.height !== h) {
+    const tmp = document.createElement('canvas');
+    tmp.width = w; tmp.height = h;
+    tmp.getContext('2d').drawImage(drawCanvas, 0, 0);
+    drawCanvas.width = w; drawCanvas.height = h;
+    drawCtx.drawImage(tmp, 0, 0);
+  }
+  render();
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvasW, canvasH);
+  // white bg
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  for (let i = 0; i < layers.length; i++) {
+    const l = layers[i];
+    ctx.save();
+    ctx.globalAlpha = l.opacity;
+    // brightness: CSS % where 100% = normal. Our slider: 0=normal, range -100..+100 → css 0%..200%
+    const bPct = 100 + (l.brightness || 0);
+    // contrast: same mapping
+    const cPct = 100 + (l.contrast || 0);
+    ctx.filter = `brightness(${bPct}%) contrast(${cPct}%)`;
+    ctx.translate(l.x + l.w/2, l.y + l.h/2);
+    ctx.rotate(l.rot * Math.PI / 180);
+    ctx.drawImage(l.img, -l.w/2, -l.h/2, l.w, l.h);
+
+    if (i === selectedIndex) {
+      ctx.filter = 'none';
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#c8f04a';
+      ctx.lineWidth = 2 / zoom;
+      ctx.setLineDash([6/zoom, 3/zoom]);
+      ctx.strokeRect(-l.w/2, -l.h/2, l.w, l.h);
+      ctx.setLineDash([]);
+      // corner handles
+      const hs = 8 / zoom;
+      ctx.fillStyle = '#c8f04a';
+      const corners = [[-l.w/2,-l.h/2],[l.w/2,-l.h/2],[-l.w/2,l.h/2],[l.w/2,l.h/2]];
+      corners.forEach(([cx,cy]) => ctx.fillRect(cx-hs/2, cy-hs/2, hs, hs));
+    }
+    ctx.restore();
+  }
+
+  // composite draw layer on top (strokes + eraser marks)
+  if (drawCanvas.width === canvasW && drawCanvas.height === canvasH) {
+    ctx.drawImage(drawCanvas, 0, 0);
+  }
+
+  updatePanelInputs();
+  updateStatusBar();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FILE LOADING
+═══════════════════════════════════════════════════════════════════ */
+document.getElementById('file-open').addEventListener('change', e => loadFile(e, true));
+document.getElementById('file-add').addEventListener('change', e => loadFile(e, false));
+
+function loadFile(e, fresh) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    if (fresh) {
+      layers = [];
+      canvasW = img.naturalWidth;
+      canvasH = img.naturalHeight;
+      zoom = 1;
+      initCanvas(canvasW, canvasH);
+      zoomFit();
+    }
+    const l = {
+      img,
+      x: fresh ? 0 : Math.round((canvasW - img.naturalWidth)/2),
+      y: fresh ? 0 : Math.round((canvasH - img.naturalHeight)/2),
+      w: img.naturalWidth,
+      h: img.naturalHeight,
+      rot: 0,
+      opacity: 1,
+      brightness: 0,
+      contrast: 0,
+      name: file.name.replace(/\.[^.]+$/,''),
+      thumb: url
+    };
+    layers.push(l);
+    selectedIndex = layers.length - 1;
+    cancelCrop();
+    saveHistory();
+    render();
+    renderLayers();
+    showPanels();
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('btn-add-layer').style.display = '';
+    e.target.value = '';
+  };
+  img.src = url;
+}
+
+// drag & drop
+wrap.addEventListener('dragover', e => e.preventDefault());
+wrap.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  const fakeEvt = { target: { files: [file], value: '' } };
+  loadFile(fakeEvt, layers.length === 0);
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   TOOL SELECTION
+═══════════════════════════════════════════════════════════════════ */
+function setTool(t) {
+  if (cropping) cancelCrop();
+
+  // eyedropper: remember what tool to go back to
+  if (t === 'eyedropper') {
+    if (currentTool !== 'eyedropper') prevTool = currentTool;
+    eyedropperActive = true;
+  } else {
+    eyedropperActive = false;
+    hidePenCursor();
+    hideEyedropperPreview();
+  }
+
+  currentTool = t;
+  document.querySelectorAll('.tool-btn[id^="tool-"]').forEach(b => b.classList.remove('active'));
+  const el = document.getElementById('tool-' + t);
+  if (el) el.classList.add('active');
+  document.getElementById('active-tool-label').textContent = t.toUpperCase();
+  document.getElementById('panel-crop').style.display = t === 'crop' ? '' : 'none';
+  document.getElementById('panel-pen').style.display = (t === 'pen' || t === 'eraser') ? '' : 'none';
+
+  if (t === 'crop' && selectedIndex >= 0) startCrop();
+
+  const cursors = { move: 'grab', crop: 'crosshair', rotate: 'cell', resize: 'se-resize', pen: 'none', eraser: 'none', eyedropper: 'crosshair' };
+  canvas.style.cursor = cursors[t] || 'default';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  // undo/redo
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); redo(); return; }
+  const map = { v:'move', c:'crop', r:'rotate', s:'resize', p:'pen', e:'eraser', i:'eyedropper', '+':'zoomIn', '=':'zoomIn', '-':'zoomOut', f:'fit' };
+  const k = e.key.toLowerCase();
+  if (k === '+' || k === '=') { zoomIn(); return; }
+  if (k === '-') { zoomOut(); return; }
+  if (k === 'f') { zoomFit(); return; }
+  // [ and ] resize pen/eraser
+  if (k === '[') {
+    if (currentTool === 'eraser') { eraserSize = Math.max(2, eraserSize - 4); document.getElementById('eraser-size-slider').value = eraserSize; document.getElementById('eraser-size-val').textContent = eraserSize + 'px'; }
+    else { penSize = Math.max(1, penSize - 2); document.getElementById('pen-size-slider').value = penSize; document.getElementById('pen-size-val').textContent = penSize + 'px'; }
+    return;
+  }
+  if (k === ']') {
+    if (currentTool === 'eraser') { eraserSize = Math.min(120, eraserSize + 4); document.getElementById('eraser-size-slider').value = eraserSize; document.getElementById('eraser-size-val').textContent = eraserSize + 'px'; }
+    else { penSize = Math.min(80, penSize + 2); document.getElementById('pen-size-slider').value = penSize; document.getElementById('pen-size-val').textContent = penSize + 'px'; }
+    return;
+  }
+  if (map[k]) setTool(map[k]);
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIndex >= 0) deleteLayer(selectedIndex);
+  if (k === 'escape' && cropping) cancelCrop();
+});
+
+/* ═══════════════════════════════════════════════════════════════════
+   CANVAS MOUSE INTERACTIONS
+═══════════════════════════════════════════════════════════════════ */
+function canvasPoint(e) {
+  const rect = canvas.getBoundingClientRect();
+  return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
+}
+
+function hitTest(pt) {
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const l = layers[i];
+    // rotate point into layer's local space
+    const cx = l.x + l.w/2, cy = l.y + l.h/2;
+    const dx = pt.x - cx, dy = pt.y - cy;
+    const ang = -l.rot * Math.PI/180;
+    const lx = dx * Math.cos(ang) - dy * Math.sin(ang);
+    const ly = dx * Math.sin(ang) + dy * Math.cos(ang);
+    if (lx >= -l.w/2 && lx <= l.w/2 && ly >= -l.h/2 && ly <= l.h/2) return i;
+  }
+  return -1;
+}
+
+function hitResizeHandle(pt) {
+  if (selectedIndex < 0) return null;
+  const l = layers[selectedIndex];
+  const hs = 12 / zoom;
+  const cx = l.x + l.w/2, cy = l.y + l.h/2;
+  const corners = { nw: [-l.w/2,-l.h/2], ne:[l.w/2,-l.h/2], sw:[-l.w/2,l.h/2], se:[l.w/2,l.h/2] };
+  const ang = -l.rot * Math.PI/180;
+  const dx = pt.x - cx, dy = pt.y - cy;
+  const lx = dx*Math.cos(ang) - dy*Math.sin(ang);
+  const ly = dx*Math.sin(ang) + dy*Math.cos(ang);
+  for (const [name,[hx,hy]] of Object.entries(corners)) {
+    if (Math.abs(lx-hx) < hs && Math.abs(ly-hy) < hs) return name;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  if (cropping) { handleCropMouseDown(e); return; }
+  const pt = canvasPoint(e);
+
+  // ── EYEDROPPER ───────────────────────────────────────
+  if (currentTool === 'eyedropper') {
+    pickColor(pt);
+    return;
+  }
+
+  // ── PEN ──────────────────────────────────────────────
+  if (currentTool === 'pen') {
+    penDrawing = true;
+    penLastPt = pt;
+    drawCtx.save();
+    drawCtx.globalAlpha = penOpacity;
+    drawCtx.globalCompositeOperation = 'source-over';
+    drawCtx.strokeStyle = penColor;
+    drawCtx.lineWidth = penSize;
+    drawCtx.lineCap = 'round';
+    drawCtx.lineJoin = 'round';
+    drawCtx.beginPath();
+    drawCtx.arc(pt.x, pt.y, penSize / 2, 0, Math.PI * 2);
+    drawCtx.fillStyle = penColor;
+    drawCtx.fill();
+    drawCtx.restore();
+    render();
+    return;
+  }
+
+  // ── ERASER ───────────────────────────────────────────
+  if (currentTool === 'eraser') {
+    penDrawing = true;
+    penLastPt = pt;
+    drawCtx.save();
+    drawCtx.globalCompositeOperation = 'destination-out';
+    drawCtx.fillStyle = 'rgba(0,0,0,1)';
+    drawCtx.beginPath();
+    drawCtx.arc(pt.x, pt.y, eraserSize / 2, 0, Math.PI * 2);
+    drawCtx.fill();
+    drawCtx.restore();
+    render();
+    return;
+  }
+
+  if (currentTool === 'move') {
+    const corner = hitResizeHandle(pt);
+    if (corner) {
+      // allow resize via handles in move mode
+      resizing = true;
+      const l = layers[selectedIndex];
+      dragStart = { corner, startW: l.w, startH: l.h, startX: l.x, startY: l.y, mx: pt.x, my: pt.y };
+      return;
+    }
+    const hit = hitTest(pt);
+    if (hit >= 0) {
+      selectedIndex = hit;
+      dragging = true;
+      const l = layers[hit];
+      dragStart = { mx: pt.x, my: pt.y, lx: l.x, ly: l.y };
+      canvas.style.cursor = 'grabbing';
+      renderLayers();
+      render();
+    } else {
+      selectedIndex = -1;
+      renderLayers();
+      render();
+    }
+  }
+
+  if (currentTool === 'resize') {
+    const hit = hitTest(pt);
+    if (hit >= 0) {
+      selectedIndex = hit;
+      resizing = true;
+      const l = layers[hit];
+      dragStart = { corner:'se', startW: l.w, startH: l.h, startX: l.x, startY: l.y, mx: pt.x, my: pt.y };
+      renderLayers();
+      render();
+    }
+  }
+
+  if (currentTool === 'rotate') {
+    const hit = hitTest(pt);
+    if (hit >= 0) {
+      selectedIndex = hit;
+      rotating = true;
+      const l = layers[hit];
+      const cx = l.x + l.w/2, cy = l.y + l.h/2;
+      rotStart = { startRot: l.rot, startAngle: Math.atan2(pt.y - cy, pt.x - cx) * 180/Math.PI };
+      renderLayers();
+      render();
+    }
+  }
+});
+
+canvas.addEventListener('mousemove', e => {
+  if (cropping) { handleCropMouseMove(e); return; }
+  const pt = canvasPoint(e);
+
+  // ── PEN CURSOR RING ──────────────────────────────────
+  if (currentTool === 'pen' || currentTool === 'eraser') {
+    showPenCursor(e, currentTool === 'eraser' ? eraserSize : penSize);
+  } else {
+    hidePenCursor();
+  }
+
+  // ── EYEDROPPER PREVIEW ───────────────────────────────
+  if (currentTool === 'eyedropper') {
+    showEyedropperPreview(e, pt);
+  }
+
+  // ── PEN STROKE ───────────────────────────────────────
+  if (penDrawing && currentTool === 'pen' && penLastPt) {
+    drawCtx.save();
+    drawCtx.globalAlpha = penOpacity;
+    drawCtx.globalCompositeOperation = 'source-over';
+    drawCtx.strokeStyle = penColor;
+    drawCtx.lineWidth = penSize;
+    drawCtx.lineCap = 'round';
+    drawCtx.lineJoin = 'round';
+    drawCtx.beginPath();
+    drawCtx.moveTo(penLastPt.x, penLastPt.y);
+    drawCtx.lineTo(pt.x, pt.y);
+    drawCtx.stroke();
+    drawCtx.restore();
+    penLastPt = pt;
+    render();
+    return;
+  }
+
+  // ── ERASER STROKE ────────────────────────────────────
+  if (penDrawing && currentTool === 'eraser' && penLastPt) {
+    drawCtx.save();
+    drawCtx.globalCompositeOperation = 'destination-out';
+    drawCtx.lineWidth = eraserSize;
+    drawCtx.lineCap = 'round';
+    drawCtx.lineJoin = 'round';
+    drawCtx.beginPath();
+    drawCtx.moveTo(penLastPt.x, penLastPt.y);
+    drawCtx.lineTo(pt.x, pt.y);
+    drawCtx.stroke();
+    drawCtx.restore();
+    penLastPt = pt;
+    render();
+    return;
+  }
+
+  if (dragging && selectedIndex >= 0) {
+    const l = layers[selectedIndex];
+    l.x = dragStart.lx + (pt.x - dragStart.mx);
+    l.y = dragStart.ly + (pt.y - dragStart.my);
+    render();
+  }
+
+  if (resizing && selectedIndex >= 0) {
+    const l = layers[selectedIndex];
+    const dx = pt.x - dragStart.mx, dy = pt.y - dragStart.my;
+    const newW = Math.max(20, dragStart.startW + dx);
+    const newH = Math.max(20, dragStart.startH + dy);
+    l.w = newW; l.h = newH;
+    render();
+  }
+
+  if (rotating && selectedIndex >= 0) {
+    const l = layers[selectedIndex];
+    const cx = l.x + l.w/2, cy = l.y + l.h/2;
+    const angle = Math.atan2(pt.y - cy, pt.x - cx) * 180/Math.PI;
+    l.rot = rotStart.startRot + (angle - rotStart.startAngle);
+    render();
+  }
+
+  // update cursor for move tool
+  if (!dragging && !resizing && !rotating && currentTool === 'move') {
+    const corner = hitResizeHandle(pt);
+    if (corner) {
+      const cursors = { nw:'nwse-resize', ne:'nesw-resize', sw:'nesw-resize', se:'nwse-resize' };
+      canvas.style.cursor = cursors[corner] || 'se-resize';
+    } else if (hitTest(pt) >= 0) {
+      canvas.style.cursor = 'grab';
+    } else {
+      canvas.style.cursor = 'default';
+    }
+  }
+
+  // update cursor pos in status
+  document.getElementById('sb-cursor').textContent = `${Math.round(pt.x)}, ${Math.round(pt.y)}`;
+});
+
+window.addEventListener('mouseup', e => {
+  if (penDrawing) {
+    penDrawing = false;
+    penLastPt = null;
+    saveHistory();
+  }
+  if ((dragging || resizing || rotating) && (dragging ? true : true)) {
+    if (layers.length > 0) saveHistory();
+  }
+  dragging = false; resizing = false; rotating = false;
+  if (!cropping) {
+    const cursors = { move: 'grab', crop: 'crosshair', rotate: 'cell', resize: 'se-resize', pen: 'none', eraser: 'none', eyedropper: 'crosshair' };
+    canvas.style.cursor = cursors[currentTool] || 'default';
+  }
+});
+
+canvas.addEventListener('mouseleave', () => { hidePenCursor(); hideEyedropperPreview(); });
+
+/* ═══════════════════════════════════════════════════════════════════
+   CROP
+═══════════════════════════════════════════════════════════════════ */
+function startCrop() {
+  if (selectedIndex < 0) return;
+  cropping = true;
+  const l = layers[selectedIndex];
+  // initial crop = full layer
+  cropRect = { x: l.x, y: l.y, w: l.w, h: l.h };
+  updateCropOverlay();
+  cropOverlay.style.display = 'block';
+}
+
+function cancelCrop() {
+  cropping = false;
+  cropOverlay.style.display = 'none';
+  cropDragging = false; cropResizing = false;
+}
+
+function updateCropOverlay() {
+  const r = canvas.getBoundingClientRect();
+  const cwr = wrap.getBoundingClientRect();
+  const ox = r.left - cwr.left;
+  const oy = r.top - cwr.top;
+  cropOverlay.style.left = (ox + cropRect.x * zoom) + 'px';
+  cropOverlay.style.top = (oy + cropRect.y * zoom) + 'px';
+  cropOverlay.style.width = (cropRect.w * zoom) + 'px';
+  cropOverlay.style.height = (cropRect.h * zoom) + 'px';
+}
+
+cropOverlay.addEventListener('mousedown', e => {
+  if (e.target.classList.contains('crop-handle')) {
+    cropResizing = true;
+    cropHandleCorner = e.target.dataset.corner;
+    cropStart = { mx: e.clientX, my: e.clientY, ...cropRect };
+    e.stopPropagation();
+    return;
+  }
+  cropDragging = true;
+  cropStart = { mx: e.clientX, my: e.clientY, ...cropRect };
+  e.stopPropagation();
+});
+
+window.addEventListener('mousemove', e => {
+  if (!cropping) return;
+  if (cropDragging) {
+    const dx = (e.clientX - cropStart.mx) / zoom;
+    const dy = (e.clientY - cropStart.my) / zoom;
+    cropRect.x = cropStart.x + dx;
+    cropRect.y = cropStart.y + dy;
+    updateCropOverlay();
+  }
+  if (cropResizing) {
+    const dx = (e.clientX - cropStart.mx) / zoom;
+    const dy = (e.clientY - cropStart.my) / zoom;
+    const c = cropHandleCorner;
+    if (c === 'nw') {
+      cropRect.x = cropStart.x + dx; cropRect.y = cropStart.y + dy;
+      cropRect.w = Math.max(10, cropStart.w - dx); cropRect.h = Math.max(10, cropStart.h - dy);
+    } else if (c === 'ne') {
+      cropRect.y = cropStart.y + dy;
+      cropRect.w = Math.max(10, cropStart.w + dx); cropRect.h = Math.max(10, cropStart.h - dy);
+    } else if (c === 'sw') {
+      cropRect.x = cropStart.x + dx;
+      cropRect.w = Math.max(10, cropStart.w - dx); cropRect.h = Math.max(10, cropStart.h + dy);
+    } else if (c === 'se') {
+      cropRect.w = Math.max(10, cropStart.w + dx); cropRect.h = Math.max(10, cropStart.h + dy);
+    }
+    updateCropOverlay();
+  }
+});
+
+window.addEventListener('mouseup', () => { cropDragging = false; cropResizing = false; });
+
+function handleCropMouseDown(e) {
+  // clicking canvas while crop tool starts new region
+  if (e.target === canvas) {
+    const pt = canvasPoint(e);
+    cropRect = { x: pt.x, y: pt.y, w: 0, h: 0 };
+    cropDragging = false;
+    // draw mode
+    cropResizing = true;
+    cropHandleCorner = 'se';
+    cropStart = { mx: e.clientX, my: e.clientY, ...cropRect };
+    updateCropOverlay();
+  }
+}
+function handleCropMouseMove(e) {
+  if (cropResizing) {
+    const dx = (e.clientX - cropStart.mx) / zoom;
+    const dy = (e.clientY - cropStart.my) / zoom;
+    cropRect.w = Math.max(10, cropStart.w + dx);
+    cropRect.h = Math.max(10, cropStart.h + dy);
+    updateCropOverlay();
+  }
+}
+
+function applyCrop() {
+  if (selectedIndex < 0 || !cropping) return;
+  const l = layers[selectedIndex];
+  // Compute crop relative to layer (ignoring rotation for simplicity)
+  const relX = cropRect.x - l.x;
+  const relY = cropRect.y - l.y;
+  const scaleX = l.img.naturalWidth / l.w;
+  const scaleY = l.img.naturalHeight / l.h;
+
+  const srcX = Math.max(0, relX * scaleX);
+  const srcY = Math.max(0, relY * scaleY);
+  const srcW = Math.min(l.img.naturalWidth - srcX, cropRect.w * scaleX);
+  const srcH = Math.min(l.img.naturalHeight - srcY, cropRect.h * scaleY);
+
+  const tmp = document.createElement('canvas');
+  tmp.width = srcW; tmp.height = srcH;
+  tmp.getContext('2d').drawImage(l.img, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+
+  const newImg = new Image();
+  newImg.onload = () => {
+    l.img = newImg; l.thumb = tmp.toDataURL();
+    l.x = l.x + relX;
+    l.y = l.y + relY;
+    l.w = cropRect.w;
+    l.h = cropRect.h;
+    cancelCrop();
+    saveHistory();
+    render();
+    renderLayers();
+  };
+  newImg.src = tmp.toDataURL();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PANEL / LAYERS
+═══════════════════════════════════════════════════════════════════ */
+function showPanels() {
+  ['panel-transform','panel-adjustments','panel-layers'].forEach(id => document.getElementById(id).style.display = '');
+}
+
+function renderLayers() {
+  const list = document.getElementById('layer-list');
+  list.innerHTML = '';
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const l = layers[i];
+    const div = document.createElement('div');
+    div.className = 'layer-item' + (i === selectedIndex ? ' selected' : '');
+    div.innerHTML = `
+      <div class="layer-thumb"><img src="${l.thumb}" draggable="false"></div>
+      <span class="layer-name">${l.name}</span>
+      <button class="layer-del" onclick="deleteLayer(${i})" title="Delete">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>`;
+    div.addEventListener('click', ev => { if (!ev.target.closest('.layer-del')) { selectedIndex = i; render(); renderLayers(); } });
+    list.appendChild(div);
+  }
+  document.getElementById('sb-layers').textContent = `${layers.length} layer${layers.length !== 1 ? 's' : ''}`;
+}
+
+function deleteLayer(i) {
+  layers.splice(i, 1);
+  if (selectedIndex >= layers.length) selectedIndex = layers.length - 1;
+  saveHistory();
+  render();
+  renderLayers();
+  if (layers.length === 0) {
+    document.getElementById('empty-state').style.display = '';
+    document.getElementById('btn-add-layer').style.display = 'none';
+    ['panel-transform','panel-adjustments','panel-layers','panel-crop'].forEach(id => document.getElementById(id).style.display='none');
+  }
+}
+
+function updatePanelInputs() {
+  if (selectedIndex < 0 || selectedIndex >= layers.length) return;
+  const l = layers[selectedIndex];
+  document.getElementById('inp-x').value = Math.round(l.x);
+  document.getElementById('inp-y').value = Math.round(l.y);
+  document.getElementById('inp-w').value = Math.round(l.w);
+  document.getElementById('inp-h').value = Math.round(l.h);
+  document.getElementById('rot-slider').value = l.rot;
+  document.getElementById('rot-val').textContent = Math.round(l.rot) + '°';
+  document.getElementById('op-slider').value = Math.round(l.opacity * 100);
+  document.getElementById('op-val').textContent = Math.round(l.opacity * 100) + '%';
+  document.getElementById('br-slider').value = l.brightness || 0;
+  document.getElementById('br-val').textContent = (l.brightness || 0);
+  document.getElementById('co-slider').value = l.contrast || 0;
+  document.getElementById('co-val').textContent = (l.contrast || 0);
+  if (selectedIndex >= 0)
+    document.getElementById('sb-size').textContent = `${Math.round(l.w)} × ${Math.round(l.h)}`;
+}
+
+function applyPropInput() {
+  if (selectedIndex < 0) return;
+  const l = layers[selectedIndex];
+  l.x = parseFloat(document.getElementById('inp-x').value) || 0;
+  l.y = parseFloat(document.getElementById('inp-y').value) || 0;
+  l.w = Math.max(1, parseFloat(document.getElementById('inp-w').value) || 1);
+  l.h = Math.max(1, parseFloat(document.getElementById('inp-h').value) || 1);
+  saveHistory();
+  render();
+}
+
+function applyAdjustments() {
+  if (selectedIndex < 0) return;
+  const l = layers[selectedIndex];
+  l.brightness = parseFloat(document.getElementById('br-slider').value);
+  l.contrast   = parseFloat(document.getElementById('co-slider').value);
+  document.getElementById('br-val').textContent = l.brightness;
+  document.getElementById('co-val').textContent = l.contrast;
+  saveHistory();
+  render();
+}
+
+function resetAdjustments() {
+  if (selectedIndex < 0) return;
+  layers[selectedIndex].brightness = 0;
+  layers[selectedIndex].contrast   = 0;
+  document.getElementById('br-slider').value = 0;
+  document.getElementById('co-slider').value = 0;
+  document.getElementById('br-val').textContent = 0;
+  document.getElementById('co-val').textContent = 0;
+  saveHistory();
+  render();
+}
+
+function applyRotSlider() {
+  if (selectedIndex < 0) return;
+  layers[selectedIndex].rot = parseFloat(document.getElementById('rot-slider').value);
+  render();
+}
+
+function applyOpSlider() {
+  if (selectedIndex < 0) return;
+  layers[selectedIndex].opacity = parseFloat(document.getElementById('op-slider').value) / 100;
+  render();
+}
+
+function updateStatusBar() {
+  document.getElementById('zoom-display').textContent = Math.round(zoom * 100) + '%';
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PEN / ERASER / EYEDROPPER HELPERS
+═══════════════════════════════════════════════════════════════════ */
+function setPenColor(hex) {
+  penColor = hex;
+  document.getElementById('pen-color-swatch').style.background = hex;
+  document.getElementById('pen-color-hex').textContent = hex;
+  document.getElementById('pen-color-input').value = hex;
+}
+
+function applyPresetColor(hex) {
+  setPenColor(hex);
+  // auto-switch to pen if on eraser/eyedropper
+  if (currentTool === 'eraser' || currentTool === 'eyedropper') setTool('pen');
+}
+
+function updatePenSize() {
+  penSize = parseInt(document.getElementById('pen-size-slider').value);
+  document.getElementById('pen-size-val').textContent = penSize + 'px';
+}
+
+function updatePenOpacity() {
+  penOpacity = parseInt(document.getElementById('pen-opacity-slider').value) / 100;
+  document.getElementById('pen-opacity-val').textContent = Math.round(penOpacity * 100) + '%';
+}
+
+function updateEraserSize() {
+  eraserSize = parseInt(document.getElementById('eraser-size-slider').value);
+  document.getElementById('eraser-size-val').textContent = eraserSize + 'px';
+}
+
+function clearDrawLayer() {
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+  saveHistory();
+  render();
+}
+
+// ── pen cursor ring ───────────────────────────────────────────────
+const penCursorEl = document.getElementById('pen-cursor');
+function showPenCursor(e, size) {
+  const screenSize = size * zoom;
+  penCursorEl.style.display = 'block';
+  penCursorEl.style.width = screenSize + 'px';
+  penCursorEl.style.height = screenSize + 'px';
+  penCursorEl.style.left = e.clientX + 'px';
+  penCursorEl.style.top = e.clientY + 'px';
+  if (currentTool === 'pen') {
+    penCursorEl.style.borderColor = penColor;
+    penCursorEl.style.background = penColor + '22';
+  } else {
+    penCursorEl.style.borderColor = 'rgba(255,255,255,.7)';
+    penCursorEl.style.background = 'rgba(255,255,255,.08)';
+  }
+}
+function hidePenCursor() { penCursorEl.style.display = 'none'; }
+
+// ── eyedropper preview ────────────────────────────────────────────
+const eyePreviewEl = document.getElementById('eyedropper-preview');
+function showEyedropperPreview(e, canvasPt) {
+  const px = Math.round(canvasPt.x), py = Math.round(canvasPt.y);
+  if (px < 0 || py < 0 || px >= canvasW || py >= canvasH) { hideEyedropperPreview(); return; }
+  const data = ctx.getImageData(px, py, 1, 1).data;
+  const hex = '#' + [data[0], data[1], data[2]].map(v => v.toString(16).padStart(2,'0')).join('');
+  eyePreviewEl.style.display = 'block';
+  eyePreviewEl.style.left = e.clientX + 'px';
+  eyePreviewEl.style.top = e.clientY + 'px';
+  eyePreviewEl.style.background = hex;
+}
+function hideEyedropperPreview() { eyePreviewEl.style.display = 'none'; }
+
+function pickColor(pt) {
+  const px = Math.round(pt.x), py = Math.round(pt.y);
+  if (px < 0 || py < 0 || px >= canvasW || py >= canvasH) return;
+  const data = ctx.getImageData(px, py, 1, 1).data;
+  const hex = '#' + [data[0], data[1], data[2]].map(v => v.toString(16).padStart(2,'0')).join('');
+  setPenColor(hex);
+  hideEyedropperPreview();
+  // go back to pen tool
+  setTool('pen');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ZOOM
+═══════════════════════════════════════════════════════════════════ */
+function applyZoom() {
+  canvas.style.width = (canvasW * zoom) + 'px';
+  canvas.style.height = (canvasH * zoom) + 'px';
+  if (cropping) updateCropOverlay();
+  updateStatusBar();
+}
+function zoomIn()  { zoom = Math.min(8, zoom * 1.25); applyZoom(); }
+function zoomOut() { zoom = Math.max(.05, zoom / 1.25); applyZoom(); }
+function zoomFit() {
+  const pw = wrap.clientWidth - 40, ph = wrap.clientHeight - 40;
+  zoom = Math.min(pw / canvasW, ph / canvasH, 1);
+  applyZoom();
+}
+
+wrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.deltaY < 0) zoomIn(); else zoomOut();
+}, { passive: false });
+
+/* ═══════════════════════════════════════════════════════════════════
+   EXPORT
+═══════════════════════════════════════════════════════════════════ */
+function exportCanvas() {
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = 'frame-export.png';
+  a.click();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════════ */
+setTool('move');
+initCanvas(800, 600);
+</script>
+</body>
+</html>
